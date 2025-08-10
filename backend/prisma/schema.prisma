@@ -1,0 +1,192 @@
+// Prisma Schema for Employee Management System
+// Google OAuth 2.0 Employee Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 従業員
+model Employee {
+  id             Int              @id @default(autoincrement())
+  employeeId     String           @unique @map("employee_id")
+  email          String           @unique
+  firstName      String           @map("first_name")
+  lastName       String           @map("last_name")
+  department     String?
+  position       String?
+  hireDate       DateTime?        @map("hire_date")
+  isActive       Boolean          @default(true) @map("is_active")
+  googleId       String?          @unique @map("google_id") // Google OAuth用
+  lastLogin      DateTime?        @map("last_login")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  employeeRoles  EmployeeRole[]
+  auditLogs      AuditLog[]
+  refreshTokens  RefreshToken[]
+  sessions       Session[]
+
+  @@map("employees")
+  @@index([email])
+  @@index([googleId])
+}
+
+// ロール
+model Role {
+  id             Int              @id @default(autoincrement())
+  roleCode       String           @unique @map("role_code")
+  roleName       String           @map("role_name")
+  description    String?
+  priority       Int              @default(0)
+  isActive       Boolean          @default(true) @map("is_active")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  employeeRoles  EmployeeRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+  @@index([roleCode])
+}
+
+// 権限
+model Permission {
+  id              Int              @id @default(autoincrement())
+  permissionCode  String           @unique @map("permission_code")
+  permissionName  String           @map("permission_name")
+  description     String?
+  resource        String?
+  action          String?
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+  @@index([permissionCode])
+  @@index([resource, action])
+}
+
+// 従業員-ロール関連
+model EmployeeRole {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int       @map("employee_id")
+  roleId        Int       @map("role_id")
+  assignedDate  DateTime  @default(now()) @map("assigned_date")
+  assignedBy    Int?      @map("assigned_by")
+  isActive      Boolean   @default(true) @map("is_active")
+
+  // Relations
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role          Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, roleId])
+  @@map("employee_roles")
+  @@index([employeeId])
+  @@index([roleId])
+}
+
+// ロール-権限関連
+model RolePermission {
+  id            Int        @id @default(autoincrement())
+  roleId        Int        @map("role_id")
+  permissionId  Int        @map("permission_id")
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  role          Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+// リフレッシュトークン
+model RefreshToken {
+  id           Int       @id @default(autoincrement())
+  token        String    @unique // ハッシュ化済み
+  employeeId   Int       @map("employee_id")
+  clientInfo   String?   @map("client_info") // User-Agent情報
+  ipAddress    String?   @map("ip_address")
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([token])
+  @@index([employeeId])
+  @@index([expiresAt])
+}
+
+// セッション
+model Session {
+  id           String    @id @default(uuid())
+  sessionId    String    @unique @map("session_id")
+  employeeId   Int       @map("employee_id")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastActivity DateTime  @default(now()) @map("last_activity")
+
+  // Relations
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+  @@index([sessionId])
+  @@index([employeeId])
+  @@index([expiresAt])
+}
+
+// 監査ログ
+model AuditLog {
+  id           Int       @id @default(autoincrement())
+  eventType    String    @map("event_type")
+  severity     String    // low, medium, high, critical
+  employeeId   Int?      @map("employee_id")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  resource     String?
+  action       String?
+  result       String?   // success, failure, allowed, denied
+  details      Json?
+  stackTrace   String?   @map("stack_trace")
+  timestamp    DateTime  @default(now())
+
+  // Relations
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+  @@index([eventType])
+  @@index([employeeId])
+  @@index([timestamp])
+  @@index([severity])
+}
+
+// Google OAuth State（CSRF対策）
+model OAuthState {
+  id           Int       @id @default(autoincrement())
+  state        String    @unique
+  codeVerifier String    @map("code_verifier") // PKCE用
+  redirectUri  String?   @map("redirect_uri")
+  ipAddress    String?   @map("ip_address")
+  expiresAt    DateTime  @map("expires_at")
+  used         Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@map("oauth_states")
+  @@index([state])
+  @@index([expiresAt])
+}

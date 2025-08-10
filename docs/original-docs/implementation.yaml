@@ -1,0 +1,726 @@
+# Google認証従業員管理システム実装指示書
+# ClaudeCode用YAMLファイル
+# Version: 1.0.0
+
+project:
+  name: google-auth-employee-system
+  type: fullstack-web-application
+  description: Google OAuth認証を使用した従業員権限管理システム
+  
+technology_stack:
+  frontend:
+    framework: React
+    version: "18.2.0"
+    language: TypeScript
+    ui_library: Material-UI
+    routing: React Router v6
+    state_management: Context API + useReducer
+    
+  backend:
+    runtime: Node.js
+    version: "18.0.0"
+    framework: Express
+    language: TypeScript
+    database: PostgreSQL
+    orm: Prisma
+    session: express-session + Redis
+    
+  authentication:
+    provider: Google OAuth 2.0
+    flow: Authorization Code Flow with PKCE
+    library: "@react-oauth/google"
+    
+directory_structure:
+  root: google-auth-employee-system
+  structure: |
+    /
+    ├── frontend/
+    │   ├── src/
+    │   │   ├── components/
+    │   │   │   ├── auth/
+    │   │   │   │   ├── LoginPage.tsx
+    │   │   │   │   ├── GoogleLoginButton.tsx
+    │   │   │   │   └── LogoutButton.tsx
+    │   │   │   ├── common/
+    │   │   │   │   ├── Layout.tsx
+    │   │   │   │   ├── Header.tsx
+    │   │   │   │   ├── Sidebar.tsx
+    │   │   │   │   └── ProtectedRoute.tsx
+    │   │   │   ├── dashboard/
+    │   │   │   │   ├── Dashboard.tsx
+    │   │   │   │   ├── UserProfile.tsx
+    │   │   │   │   └── PermissionCard.tsx
+    │   │   │   └── errors/
+    │   │   │       ├── AccessDenied.tsx
+    │   │   │       └── NotFound.tsx
+    │   │   ├── services/
+    │   │   │   ├── auth/
+    │   │   │   │   ├── GoogleAuthService.ts
+    │   │   │   │   ├── TokenManager.ts
+    │   │   │   │   └── PKCEManager.ts
+    │   │   │   ├── api/
+    │   │   │   │   ├── ApiClient.ts
+    │   │   │   │   ├── EmployeeService.ts
+    │   │   │   │   └── PermissionService.ts
+    │   │   │   └── security/
+    │   │   │       ├── CSRFProtection.ts
+    │   │   │       └── SecureStorage.ts
+    │   │   ├── contexts/
+    │   │   │   ├── AuthContext.tsx
+    │   │   │   └── PermissionContext.tsx
+    │   │   ├── hooks/
+    │   │   │   ├── useAuth.ts
+    │   │   │   ├── usePermission.ts
+    │   │   │   └── useEmployee.ts
+    │   │   ├── types/
+    │   │   │   ├── auth.types.ts
+    │   │   │   ├── employee.types.ts
+    │   │   │   └── permission.types.ts
+    │   │   ├── utils/
+    │   │   │   ├── constants.ts
+    │   │   │   ├── validators.ts
+    │   │   │   └── helpers.ts
+    │   │   ├── App.tsx
+    │   │   └── index.tsx
+    │   ├── public/
+    │   │   └── index.html
+    │   ├── package.json
+    │   ├── tsconfig.json
+    │   └── .env.example
+    │
+    ├── backend/
+    │   ├── src/
+    │   │   ├── controllers/
+    │   │   │   ├── authController.ts
+    │   │   │   ├── employeeController.ts
+    │   │   │   └── permissionController.ts
+    │   │   ├── services/
+    │   │   │   ├── googleAuthService.ts
+    │   │   │   ├── employeeService.ts
+    │   │   │   ├── permissionService.ts
+    │   │   │   └── tokenService.ts
+    │   │   ├── middleware/
+    │   │   │   ├── authMiddleware.ts
+    │   │   │   ├── permissionMiddleware.ts
+    │   │   │   ├── rateLimiter.ts
+    │   │   │   └── errorHandler.ts
+    │   │   ├── models/
+    │   │   │   ├── Employee.ts
+    │   │   │   ├── Permission.ts
+    │   │   │   ├── Role.ts
+    │   │   │   └── index.ts
+    │   │   ├── routes/
+    │   │   │   ├── authRoutes.ts
+    │   │   │   ├── employeeRoutes.ts
+    │   │   │   └── permissionRoutes.ts
+    │   │   ├── database/
+    │   │   │   ├── migrations/
+    │   │   │   ├── seeds/
+    │   │   │   └── prisma/
+    │   │   │       └── schema.prisma
+    │   │   ├── config/
+    │   │   │   ├── database.ts
+    │   │   │   ├── redis.ts
+    │   │   │   └── google.ts
+    │   │   ├── utils/
+    │   │   │   ├── logger.ts
+    │   │   │   ├── crypto.ts
+    │   │   │   └── validators.ts
+    │   │   ├── app.ts
+    │   │   └── server.ts
+    │   ├── tests/
+    │   │   ├── unit/
+    │   │   ├── integration/
+    │   │   └── e2e/
+    │   ├── package.json
+    │   ├── tsconfig.json
+    │   └── .env.example
+    │
+    ├── docker/
+    │   ├── Dockerfile.frontend
+    │   ├── Dockerfile.backend
+    │   └── docker-compose.yml
+    │
+    ├── scripts/
+    │   ├── setup.sh
+    │   ├── migrate.sh
+    │   └── seed.sh
+    │
+    └── README.md
+
+implementation_tasks:
+  phase_0_architecture_decision:
+    - task: アーキテクチャ選択
+      description: "Google固有の要件に基づくアーキテクチャ決定"
+      options:
+        backend_proxy_pattern:
+          description: "推奨: バックエンドプロキシパターン"
+          pros:
+            - "client_secretを安全に管理"
+            - "フロントエンドに機密情報を露出しない"
+            - "標準的なセキュリティベストプラクティス"
+          implementation:
+            - "フロントエンド: 認証開始とコールバック処理"
+            - "バックエンド: client_secret管理とトークン交換"
+            
+        uwp_workaround:
+          description: "代替: UWPタイプとして登録"
+          pros:
+            - "client_secret不要の可能性"
+            - "実装がシンプル"
+          cons:
+            - "公式にサポートされていない回避策"
+            - "将来的に使用できなくなる可能性"
+            
+        embedded_secret:
+          description: "非推奨: client_secretをフロントエンドに埋め込み"
+          warning: "セキュリティリスクが高い"
+          cons:
+            - "client_secretが公開される"
+            - "Googleの規約違反の可能性"
+  
+  phase_1_setup:
+    - task: プロジェクト初期化
+      steps:
+        - フロントエンドとバックエンドのディレクトリ作成
+        - package.json の初期化
+        - TypeScript設定
+        - ESLint/Prettier設定
+        
+    - task: 環境設定ファイル作成
+      files:
+        - frontend/.env.example
+        - backend/.env.example
+      variables:
+        - REACT_APP_GOOGLE_CLIENT_ID
+        - REACT_APP_API_URL
+        - DATABASE_URL
+        - REDIS_URL
+        - JWT_SECRET
+        - GOOGLE_CLIENT_SECRET
+        
+  phase_2_database:
+    - task: Prismaスキーマ定義
+      file: backend/src/database/prisma/schema.prisma
+      models:
+        - Employee
+        - Permission
+        - Role
+        - EmployeeRole
+        - RolePermission
+        
+    - task: マイグレーション作成
+      commands:
+        - npx prisma migrate dev --name init
+        - npx prisma generate
+        
+    - task: シードデータ作成
+      file: backend/src/database/seeds/seed.ts
+      data:
+        - 初期役割データ
+        - 初期権限データ
+        - テスト従業員データ
+        
+  phase_3_backend_core:
+    - task: Express サーバー設定
+      files:
+        - backend/src/app.ts
+        - backend/src/server.ts
+      features:
+        - CORS設定
+        - セッション管理
+        - エラーハンドリング
+        - ログ設定
+        
+    - task: Google OAuth認証実装
+      files:
+        - backend/src/services/googleAuthService.ts
+      features:
+        - トークン検証
+        - PKCE検証
+        - State検証
+        - ユーザー情報取得
+        
+    - task: 認証ミドルウェア実装
+      files:
+        - backend/src/middleware/authMiddleware.ts
+      features:
+        - JWTトークン検証
+        - セッション検証
+        - リフレッシュトークン処理
+        
+    - task: 権限ミドルウェア実装
+      files:
+        - backend/src/middleware/permissionMiddleware.ts
+      features:
+        - 権限チェック
+        - 役割ベースアクセス制御
+        - リソース別アクセス制御
+        
+  phase_4_backend_api:
+    - task: 認証APIエンドポイント
+      endpoints:
+        - POST /api/auth/google
+        - POST /api/auth/refresh
+        - POST /api/auth/logout
+        - GET /api/auth/session
+        
+    - task: 従業員APIエンドポイント
+      endpoints:
+        - GET /api/employees/me
+        - GET /api/employees/:email
+        - PUT /api/employees/:id
+        - GET /api/employees/:id/permissions
+        
+    - task: 権限APIエンドポイント
+      endpoints:
+        - GET /api/permissions
+        - POST /api/permissions/validate
+        - GET /api/roles
+        - POST /api/roles/:id/assign
+        
+  phase_5_frontend_core:
+    - task: React アプリケーション設定
+      files:
+        - frontend/src/App.tsx
+        - frontend/src/index.tsx
+      dependencies:
+        - "@react-oauth/google": "^0.11.1"
+        - "@mui/material": "^5.14.0"
+        - "react-router-dom": "^6.16.0"
+        - "axios": "^1.5.0"
+        
+    - task: Google OAuth設定
+      files:
+        - frontend/src/services/auth/GoogleAuthService.ts
+      features:
+        - GoogleOAuthProvider設定
+        - PKCE実装
+        - State生成と検証
+        - トークン管理
+        
+    - task: 認証コンテキスト実装
+      files:
+        - frontend/src/contexts/AuthContext.tsx
+      features:
+        - ログイン/ログアウト処理
+        - ユーザー状態管理
+        - トークン自動更新
+        - セッション管理
+        
+  phase_6_frontend_components:
+    - task: ログインページ実装
+      files:
+        - frontend/src/components/auth/LoginPage.tsx
+        - frontend/src/components/auth/GoogleLoginButton.tsx
+      features:
+        - Googleログインボタン
+        - エラー表示
+        - リダイレクト処理
+        
+    - task: ダッシュボード実装
+      files:
+        - frontend/src/components/dashboard/Dashboard.tsx
+      features:
+        - ユーザー情報表示
+        - 権限一覧表示
+        - 利用可能機能表示
+        
+    - task: 保護ルート実装
+      files:
+        - frontend/src/components/common/ProtectedRoute.tsx
+      features:
+        - 認証チェック
+        - 権限チェック
+        - リダイレクト処理
+        
+    - task: エラーページ実装
+      files:
+        - frontend/src/components/errors/AccessDenied.tsx
+        - frontend/src/components/errors/NotFound.tsx
+      features:
+        - アクセス拒否表示
+        - 404エラー表示
+        
+  phase_7_security:
+    - task: セキュリティ実装
+      features:
+        - CSRF対策
+        - XSS対策
+        - SQLインジェクション対策
+        - レート制限
+        - セキュアヘッダー設定
+        
+    - task: トークン暗号化実装
+      files:
+        - frontend/src/services/security/SecureStorage.ts
+      features:
+        - AES-256-GCM暗号化
+        - セキュアストレージ
+        
+  phase_8_testing:
+    - task: 単体テスト作成
+      coverage: 80%
+      targets:
+        - 認証サービス
+        - 権限チェック
+        - APIエンドポイント
+        
+    - task: 統合テスト作成
+      scenarios:
+        - ログインフロー
+        - 権限検証フロー
+        - エラーハンドリング
+        
+    - task: E2Eテスト作成
+      tool: Cypress
+      flows:
+        - 完全認証フロー
+        - 権限別アクセステスト
+        
+  phase_9_deployment:
+    - task: Docker設定
+      files:
+        - docker/Dockerfile.frontend
+        - docker/Dockerfile.backend
+        - docker/docker-compose.yml
+        
+    - task: 環境別設定
+      environments:
+        - development
+        - staging
+        - production
+        
+    - task: CI/CD設定
+      file: .github/workflows/deploy.yml
+      stages:
+        - lint
+        - test
+        - build
+        - deploy
+
+security_considerations:
+  google_specific_requirements:
+    - name: "Client Secret必須"
+      description: "Web ApplicationタイプではPKCE使用時もclient_secret必須"
+      workaround: |
+        # 回避策1: バックエンドプロキシ
+        - フロントエンド → バックエンド → Google OAuth
+        - client_secretはバックエンドのみで保持
+        
+        # 回避策2: UWPタイプとして登録
+        - Create OAuth client ID → Universal Windows Platform
+        - client_secretが不要になる場合がある
+      
+    - name: "シークレットの一度きり表示"
+      description: "2025年6月以降、作成時のみ表示可能"
+      action: "作成時に必ずダウンロードして安全に保管"
+
+google_oauth_configuration:
+  important_2025_updates:
+    less_secure_apps_deprecation:
+      deadline: "2025-03-14"
+      impact: "All apps must use OAuth 2.0"
+      affected_protocols:
+        - IMAP
+        - POP
+        - SMTP
+        - CalDAV
+        - CardDAV
+        - Google Sync
+    
+    client_secret_requirements:
+      web_application_type:
+        pkce_with_secret: true  # PKCEを使用してもclient_secret必須
+        reason: "Google固有の実装要件"
+        workaround: "バックエンドプロキシパターン推奨"
+      
+      mobile_desktop_type:
+        pkce_only: false  # 一部のケースでclient_secret必要
+        uwp_workaround: true  # UWPタイプとして登録で回避可能
+    
+    secret_management_changes:
+      effective_date: "2025-06"
+      changes:
+        - "作成時のみ表示・ダウンロード可能"
+        - "ハッシュ化保存（後から確認不可）"
+        - "必ず作成時にダウンロードすること"
+  
+  google_cloud_console:
+    project_name: employee-management-system
+    apis_to_enable:
+      - Google+ API
+      - Google Identity Service
+      
+  oauth_consent_screen:
+    app_name: 従業員管理システム
+    user_type: Internal # or External
+    scopes:
+      - email
+      - profile
+      - openid
+      
+  credentials:
+    web_application:
+      authorized_javascript_origins:
+        - http://localhost:3000
+        - https://staging.example.com
+        - https://app.example.com
+      authorized_redirect_uris:
+        - http://localhost:3000/auth/callback
+        - https://staging.example.com/auth/callback
+        - https://app.example.com/auth/callback
+
+sample_code_snippets:
+  backend_proxy_pattern: |
+    // BackendGoogleAuthController.ts - Client Secret保護パターン
+    import { Request, Response } from 'express';
+    
+    export class BackendGoogleAuthController {
+      private readonly clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
+      
+      // フロントエンドには認証URLのみ提供
+      async getAuthorizationUrl(req: Request, res: Response) {
+        const { state, codeChallenge } = req.body;
+        
+        const params = new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
+          response_type: 'code',
+          scope: 'openid email profile',
+          state,
+          code_challenge: codeChallenge,
+          code_challenge_method: 'S256',
+          access_type: 'offline',
+          prompt: 'consent'
+        });
+        
+        res.json({
+          authorizationUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+        });
+      }
+      
+      // トークン交換はバックエンドで実行（client_secret使用）
+      async exchangeToken(req: Request, res: Response) {
+        const { code, codeVerifier } = req.body;
+        
+        try {
+          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              code,
+              client_id: process.env.GOOGLE_CLIENT_ID!,
+              client_secret: this.clientSecret, // ここでのみ使用
+              redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
+              grant_type: 'authorization_code',
+              code_verifier: codeVerifier,
+            }),
+          });
+          
+          const tokens = await tokenResponse.json();
+          
+          // JWTトークンを生成してフロントエンドに返す
+          const jwt = this.generateJWT(tokens);
+          
+          res.json({ 
+            success: true, 
+            accessToken: jwt,
+            expiresIn: 3600 
+          });
+        } catch (error) {
+          res.status(401).json({ 
+            success: false, 
+            error: 'Authentication failed' 
+          });
+        }
+      }
+    }
+  
+  google_auth_service: |
+    // FrontendGoogleAuthService.ts - Client Secretを扱わない
+    import { CodeChallengeMethod, generateCodeChallenge, generateCodeVerifier } from './PKCEManager';
+    
+    export class FrontendGoogleAuthService {
+      private codeVerifier: string;
+      private state: string;
+      
+      async initiateLogin(): Promise<void> {
+        // PKCE準備
+        this.codeVerifier = generateCodeVerifier();
+        const codeChallenge = await generateCodeChallenge(this.codeVerifier);
+        
+        // CSRF対策のState生成
+        this.state = this.generateState();
+        
+        // バックエンドから認証URL取得（client_secretは含まない）
+        const response = await fetch('/api/auth/google/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: this.state, codeChallenge })
+        });
+        
+        const { authorizationUrl } = await response.json();
+        window.location.href = authorizationUrl;
+      }
+      
+      async handleCallback(code: string, state: string): Promise<void> {
+        // State検証
+        if (state !== this.state) {
+          throw new Error('State mismatch - possible CSRF attack');
+        }
+        
+        // バックエンド経由でトークン交換（client_secretはバックエンドで処理）
+        const response = await fetch('/api/auth/google/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ 
+            code, 
+            codeVerifier: this.codeVerifier 
+          })
+        });
+        
+        const { accessToken } = await response.json();
+        // トークンを安全に保存
+        this.securelyStoreToken(accessToken);
+      }
+    }
+
+  permission_check: |
+    // PermissionMiddleware.ts
+    export const requirePermission = (resource: string, action: string) => {
+      return async (req: Request, res: Response, next: NextFunction) => {
+        try {
+          const userId = req.user.id;
+          const hasPermission = await permissionService.checkPermission(
+            userId, 
+            resource, 
+            action
+          );
+          
+          if (!hasPermission) {
+            return res.status(403).json({
+              success: false,
+              error: {
+                code: 'ACCESS_DENIED',
+                message: 'この操作を実行する権限がありません'
+              }
+            });
+          }
+          
+          next();
+        } catch (error) {
+          next(error);
+        }
+      };
+    };
+
+  protected_route_component: |
+    // ProtectedRoute.tsx
+    import React from 'react';
+    import { Navigate } from 'react-router-dom';
+    import { useAuth } from '../../hooks/useAuth';
+    import { usePermission } from '../../hooks/usePermission';
+    
+    interface ProtectedRouteProps {
+      children: React.ReactNode;
+      requiredPermission?: string;
+      resource?: string;
+      action?: string;
+    }
+    
+    export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
+      children, 
+      requiredPermission,
+      resource,
+      action 
+    }) => {
+      const { isAuthenticated, loading } = useAuth();
+      const { hasPermission } = usePermission();
+      
+      if (loading) {
+        return <div>Loading...</div>;
+      }
+      
+      if (!isAuthenticated) {
+        return <Navigate to="/login" replace />;
+      }
+      
+      if (requiredPermission && !hasPermission(requiredPermission)) {
+        return <Navigate to="/access-denied" replace />;
+      }
+      
+      if (resource && action && !hasPermission(resource, action)) {
+        return <Navigate to="/access-denied" replace />;
+      }
+      
+      return <>{children}</>;
+    };
+
+error_handling:
+  frontend_errors:
+    - GOOGLE_AUTH_FAILED: Googleログインに失敗しました
+    - TOKEN_EXPIRED: セッションの有効期限が切れました
+    - NETWORK_ERROR: ネットワークエラーが発生しました
+    - PERMISSION_DENIED: アクセス権限がありません
+    
+  backend_errors:
+    - EMPLOYEE_NOT_FOUND: 従業員が見つかりません
+    - INVALID_TOKEN: 無効なトークンです
+    - DATABASE_ERROR: データベースエラーが発生しました
+    - RATE_LIMIT_EXCEEDED: リクエスト制限を超過しました
+
+testing_scenarios:
+  authentication:
+    - 正常なGoogleログイン
+    - 無効なトークンでのアクセス
+    - トークンの自動更新
+    - ログアウト処理
+    
+  authorization:
+    - 権限がある場合のアクセス
+    - 権限がない場合の拒否
+    - 役割変更後の権限更新
+    - 無効な従業員のアクセス拒否
+    
+  security:
+    - CSRF攻撃の防御
+    - XSS攻撃の防御
+    - SQLインジェクションの防御
+    - レート制限の動作
+
+performance_requirements:
+  frontend:
+    initial_load: 3s
+    api_response: 500ms
+    token_refresh: 100ms
+    
+  backend:
+    auth_endpoint: 200ms
+    data_endpoint: 300ms
+    database_query: 100ms
+    
+  scalability:
+    concurrent_users: 1000
+    requests_per_second: 500
+    database_connections: 100
+
+monitoring:
+  metrics:
+    - ログイン成功率
+    - API応答時間
+    - エラー発生率
+    - 同時接続ユーザー数
+    
+  logging:
+    - 認証イベント
+    - 権限チェックイベント
+    - エラーイベント
+    - セキュリティイベント
+    
+  alerts:
+    - 認証失敗率が閾値を超過
+    - API応答時間が遅延
+    - データベース接続エラー
+    - セキュリティ違反検出
