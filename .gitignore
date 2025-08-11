@@ -53,10 +53,12 @@ docker/data/
 # Redis
 dump.rdb
 
-# Certificates
+# Certificates and Secrets
 *.pem
 *.key
 *.crt
+client_secret*.json
+*client_secret*.json
 
 # Temporary files
 tmp/
