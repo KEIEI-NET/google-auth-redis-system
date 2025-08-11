@@ -9,8 +9,8 @@ export class RedisManager {
   private fallbackMode: boolean = false;
 
   private constructor() {
-    const redisUrl = process.env.REDIS_URL || 
-      `redis://:${config.redis.password}@${config.redis.host}:${config.redis.port}`;
+    // Use config.redis.url which handles password presence/absence correctly
+    const redisUrl = process.env.REDIS_URL || config.redis.url;
 
     this.client = createClient({
       url: redisUrl,
@@ -18,7 +18,6 @@ export class RedisManager {
         connectTimeout: 10000,
         reconnectStrategy: this.reconnectStrategy.bind(this),
       },
-      lazyConnect: true,
     });
 
     this.setupEventHandlers();

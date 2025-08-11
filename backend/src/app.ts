@@ -1,3 +1,7 @@
+// 環境変数を最初に読み込む
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import compression from 'compression';
@@ -19,9 +23,14 @@ import { redisClient } from './config/redis';
 import { helmetConfig, securityHeaders, validateContentType } from './middleware/security';
 import { xssPrevention } from './middleware/validation';
 
-// Prismaクライアント
+// Prismaクライアント (デバッグ用に詳細ログを有効化)
 export const prisma = new PrismaClient({
-  log: config.isDevelopment ? ['query', 'info', 'warn', 'error'] : ['error'],
+  log: ['query', 'info', 'warn', 'error'],
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
 });
 
 export const createApp = (): Application => {

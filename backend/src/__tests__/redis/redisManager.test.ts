@@ -133,7 +133,7 @@ describe('RedisManager', () => {
     it('should disable fallback mode when ready', async () => {
       // Simulate ready event
       const readyHandler = mockClient.on.mock.calls.find(
-        call => call[0] === 'ready'
+        (call: any) => call[0] === 'ready'
       )?.[1];
       
       if (readyHandler) {
@@ -196,14 +196,14 @@ describe('RedisManager', () => {
       const events = ['error', 'connect', 'ready', 'reconnecting', 'end'];
       
       events.forEach(event => {
-        const handler = mockClient.on.mock.calls.find(call => call[0] === event);
+        const handler = mockClient.on.mock.calls.find((call: any) => call[0] === event);
         expect(handler).toBeDefined();
       });
     });
 
     it('should handle error events', () => {
       const errorHandler = mockClient.on.mock.calls.find(
-        call => call[0] === 'error'
+        (call: any) => call[0] === 'error'
       )?.[1];
       
       const consoleError = jest.spyOn(console, 'error').mockImplementation();
@@ -222,7 +222,7 @@ describe('RedisManager', () => {
 
     it('should handle connect events', () => {
       const connectHandler = mockClient.on.mock.calls.find(
-        call => call[0] === 'connect'
+        (call: any) => call[0] === 'connect'
       )?.[1];
       
       const consoleLog = jest.spyOn(console, 'log').mockImplementation();

@@ -9,9 +9,9 @@ const createRedisStore = () => {
   
   if (redis.isHealthy()) {
     return new RedisStore({
-      client: redis.getClient(),
+      client: redis.getClient() as any,
       prefix: 'rl:',
-    });
+    } as any);
   }
   
   // Return undefined to use default memory store as fallback

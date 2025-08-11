@@ -17,7 +17,7 @@ const envSchema = z.object({
   // Redis設定
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.string().default('6379').transform(Number),
-  REDIS_PASSWORD: z.string(),
+  REDIS_PASSWORD: z.string().optional(),
   
   // Google OAuth設定
   GOOGLE_CLIENT_ID: z.string(),
@@ -83,7 +83,9 @@ export const config = {
     host: env.REDIS_HOST,
     port: env.REDIS_PORT,
     password: env.REDIS_PASSWORD,
-    url: `redis://default:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}`,
+    url: env.REDIS_PASSWORD 
+      ? `redis://default:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}`
+      : `redis://${env.REDIS_HOST}:${env.REDIS_PORT}`,
   },
   
   google: {

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { AuthController } from '../controllers/authController';
 import { authenticateToken } from '../middleware/auth';
 import { authenticateTokenFromCookie } from '../middleware/cookieAuth';
@@ -39,5 +39,18 @@ router.get(
   authenticateTokenFromCookie,
   AuthController.getCurrentUser
 );
+
+// CSRFトークン取得エンドポイント（開発環境用）
+router.get('/csrf-token', authLimiter, (req: Request, res: Response) => {
+  // 開発環境向けの簡易実装
+  // 本番環境では CsrfProtection.getTokenEndpoint() を使用
+  res.status(401).json({
+    success: false,
+    error: {
+      code: 'CSRF_NOT_IMPLEMENTED',
+      message: 'CSRF token endpoint is not implemented in development mode'
+    }
+  });
+});
 
 export default router;
