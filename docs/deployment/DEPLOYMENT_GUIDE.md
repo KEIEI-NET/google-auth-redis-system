@@ -56,7 +56,12 @@ POSTGRES_PASSWORD=$(openssl rand -base64 16)
 DATABASE_PASSWORD=$(openssl rand -base64 16)
 
 # Redis
+REDIS_HOST=redis
+REDIS_PORT=6379
 REDIS_PASSWORD=$(openssl rand -base64 16)
+REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+REDIS_MAX_RETRIES=10
+REDIS_RETRY_DELAY=3000
 
 # Monitoring
 GRAFANA_PASSWORD=$(openssl rand -base64 16)
@@ -225,6 +230,94 @@ sudo certbot renew --dry-run
 
 # Add to crontab
 0 0,12 * * * certbot renew --quiet
+```
+
+## Redis Configuration
+
+### Production Redis Setup
+
+#### 1. Redis Configuration File
+Create a custom Redis configuration for production:
+
+```bash
+# /etc/redis/redis.conf
+# Persistence
+save 900 1
+save 300 10
+save 60 10000
+appendonly yes
+appendfsync everysec
+
+# Memory Management
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+
+# Security
+requirepass ${REDIS_PASSWORD}
+protected-mode yes
+bind 127.0.0.1 ::1
+
+# Performance
+tcp-keepalive 300
+timeout 0
+tcp-backlog 511
+```
+
+#### 2. Redis Docker Configuration
+```yaml
+# docker-compose.prod.yml
+redis:
+  image: redis:7-alpine
+  restart: always
+  ports:
+    - "127.0.0.1:6379:6379"
+  environment:
+    - REDIS_PASSWORD=${REDIS_PASSWORD}
+  volumes:
+    - redis_data:/data
+    - ./redis.conf:/usr/local/etc/redis/redis.conf
+  command: redis-server /usr/local/etc/redis/redis.conf
+  healthcheck:
+    test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+    interval: 30s
+    timeout: 3s
+    retries: 3
+```
+
+#### 3. Redis Monitoring
+```bash
+# Check Redis health
+docker exec redis_container redis-cli -a ${REDIS_PASSWORD} ping
+
+# Monitor Redis in real-time
+docker exec redis_container redis-cli -a ${REDIS_PASSWORD} monitor
+
+# Check Redis info
+docker exec redis_container redis-cli -a ${REDIS_PASSWORD} info
+
+# Check memory usage
+docker exec redis_container redis-cli -a ${REDIS_PASSWORD} info memory
+```
+
+#### 4. Redis Backup
+```bash
+# Manual backup
+docker exec redis_container redis-cli -a ${REDIS_PASSWORD} BGSAVE
+
+# Copy backup file
+docker cp redis_container:/data/dump.rdb ./backups/redis_backup_$(date +%Y%m%d).rdb
+```
+
+#### 5. Redis Recovery
+```bash
+# Stop Redis
+docker-compose -f docker-compose.prod.yml stop redis
+
+# Restore backup
+docker cp ./backups/redis_backup.rdb redis_container:/data/dump.rdb
+
+# Start Redis
+docker-compose -f docker-compose.prod.yml start redis
 ```
 
 ## Monitoring Setup

@@ -1,8 +1,27 @@
 import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import { RedisManager } from '../config/redisManager';
 import { AppError, ErrorCode } from '../types';
 
-// General API rate limiter (in-memory store for now)
+// Create Redis store for rate limiting
+const createRedisStore = () => {
+  const redis = RedisManager.getInstance();
+  
+  if (redis.isHealthy()) {
+    return new RedisStore({
+      client: redis.getClient(),
+      prefix: 'rl:',
+    });
+  }
+  
+  // Return undefined to use default memory store as fallback
+  console.warn('Redis not available for rate limiting, using memory store');
+  return undefined;
+};
+
+// General API rate limiter with Redis store
 export const apiLimiter = rateLimit({
+  store: createRedisStore(),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.',
@@ -19,6 +38,7 @@ export const apiLimiter = rateLimit({
 
 // Strict rate limiter for authentication endpoints
 export const authLimiter = rateLimit({
+  store: createRedisStore(),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Limit each IP to 5 auth requests per windowMs
   skipSuccessfulRequests: true, // Don't count successful requests
@@ -35,7 +55,7 @@ export const authLimiter = rateLimit({
 
 // Very strict rate limiter for token refresh
 export const refreshTokenLimiter = rateLimit({
-  // Using in-memory store for now
+  store: createRedisStore(),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10, // Limit each IP to 10 refresh requests per hour
   standardHeaders: true,
@@ -51,6 +71,7 @@ export const refreshTokenLimiter = rateLimit({
 
 // Rate limiter for Google OAuth initiation
 export const oauthInitLimiter = rateLimit({
+  store: createRedisStore(),
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 3, // Limit each IP to 3 OAuth init requests per 5 minutes
   standardHeaders: true,
@@ -67,6 +88,7 @@ export const oauthInitLimiter = rateLimit({
 // Dynamic rate limiter based on user role
 export const createDynamicLimiter = (multiplier: number = 1) => {
   return rateLimit({
+    store: createRedisStore(),
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: (req) => {
       // Admins get 5x the limit, managers get 2x

@@ -2,14 +2,28 @@ import { createApp, prisma } from './app';
 import { createServer } from 'http';
 import { config } from './config/env';
 import { connectRedis, disconnectRedis, redisClient } from './config/redis';
+import { RedisManager } from './config/redisManager';
+import { SessionService } from './services/sessionService';
+import { CacheService } from './services/cacheService';
 
 // サーバーの起動
 async function startServer() {
   try {
-    // Redis接続
+    // Redis Manager初期化とRedis接続
+    const redisManager = RedisManager.getInstance();
+    await redisManager.connect();
+    // eslint-disable-next-line no-console
+    console.log('✅ Redis Manager接続が確立されました');
+    
+    // 既存のRedis接続も維持（後方互換性）
     await connectRedis();
     // eslint-disable-next-line no-console
     console.log('✅ Redis接続が確立されました');
+    
+    // セッションとキャッシュのクリーンアップスケジューラーを開始
+    SessionService.startCleanupScheduler();
+    CacheService.startCleanupScheduler();
+    console.log('✅ クリーンアップスケジューラーが開始されました');
 
     // データベース接続確認
     await prisma.$connect();
@@ -45,7 +59,12 @@ async function startServer() {
         console.log('✅ HTTPサーバーを閉じました');
 
         try {
-          // Redis接続を閉じる
+          // Redis Manager接続を閉じる
+          const redisManager = RedisManager.getInstance();
+          await redisManager.disconnect();
+          console.log('✅ Redis Manager接続を閉じました');
+          
+          // 既存のRedis接続も閉じる
           await disconnectRedis();
           // eslint-disable-next-line no-console
           console.log('✅ Redis接続を閉じました');

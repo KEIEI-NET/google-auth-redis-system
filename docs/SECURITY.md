@@ -16,12 +16,15 @@
 
 The Google Auth Employee System implements a defense-in-depth security strategy with multiple layers of protection. This document details the security architecture, implemented controls, and guidelines for maintaining system security.
 
+**Last Updated**: 2025-08-11 - Added Redis security configuration and session management enhancements
+
 ### Security Principles
 - **Principle of Least Privilege**: Users and processes operate with minimal required permissions
 - **Defense in Depth**: Multiple security layers protect against various attack vectors
 - **Zero Trust Architecture**: All requests are verified regardless of source
 - **Security by Design**: Security considerations integrated throughout the development lifecycle
 - **Continuous Monitoring**: Real-time security event monitoring and logging
+- **Resilient Architecture**: Fallback mechanisms ensure availability without compromising security
 
 ## Authentication Architecture
 
@@ -240,7 +243,55 @@ const xssPrevention = (req: Request, res: Response, next: NextFunction) => {
 };
 ```
 
-### 4. CSRF Protection
+### 4. Redis Security Configuration
+
+#### Password Protection
+```typescript
+// Redis connection with authentication
+const redisUrl = process.env.REDIS_URL || 
+  `redis://:${config.redis.password}@${config.redis.host}:${config.redis.port}`;
+
+const client = createClient({
+  url: redisUrl,
+  socket: {
+    connectTimeout: 10000,
+    tls: process.env.NODE_ENV === 'production' ? {
+      rejectUnauthorized: true
+    } : undefined
+  }
+});
+```
+
+#### Session Management Security
+```typescript
+// Three-tier session storage with security layers
+class SessionService {
+  // Session data never stored in plain text
+  static async createSession(sessionId: string, employeeId: number) {
+    const sessionData = {
+      employeeId,
+      ipAddress: req.ip, // IP validation
+      userAgent: req.headers['user-agent'], // Fingerprinting
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + TTL).toISOString()
+    };
+    
+    // Multi-layer storage for resilience
+    await redis.setEx(key, TTL, JSON.stringify(sessionData));
+    await prisma.session.create({ data: sessionData });
+  }
+}
+```
+
+#### Redis Security Best Practices
+1. **Access Control**: Redis bound to localhost only in production
+2. **Password Complexity**: Minimum 32 characters, randomly generated
+3. **Network Isolation**: Redis in private Docker network
+4. **Command Blacklisting**: Dangerous commands disabled (FLUSHDB, CONFIG, etc.)
+5. **TLS Encryption**: Enabled for production environments
+6. **Memory Limits**: Prevent DoS through memory exhaustion
+
+### 5. CSRF Protection
 
 State parameter validation with IP address verification:
 
