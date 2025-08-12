@@ -83,7 +83,23 @@ export class AuthControllerDev {
           },
         },
       });
-    } catch (error) {
+    } catch (error: any) {
+      // バリデーションエラーの場合は400エラーを返す
+      if (error.message && (
+        error.message.includes('Invalid') || 
+        error.message.includes('validation') ||
+        error.message.includes('SQL') ||
+        error.message.includes('script')
+      )) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: error.message || 'Invalid request parameters',
+          },
+        });
+        return;
+      }
       next(error);
     }
   }

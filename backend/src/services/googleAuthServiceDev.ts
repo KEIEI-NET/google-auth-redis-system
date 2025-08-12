@@ -76,6 +76,33 @@ export class GoogleAuthServiceDev {
     ipAddress?: string,
     userAgent?: string
   ): Promise<any> {
+    // 入力検証 - SQLインジェクションやXSS攻撃を防ぐ
+    const dangerousPatterns = [
+      /DROP\s+TABLE/i,
+      /DELETE\s+FROM/i,
+      /INSERT\s+INTO/i,
+      /UPDATE\s+SET/i,
+      /<script/i,
+      /<iframe/i,
+      /javascript:/i,
+      /on\w+\s*=/i,
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(code) || pattern.test(state)) {
+        throw new Error('Invalid input: potential security threat detected');
+      }
+    }
+
+    // 基本的な入力検証
+    if (!code || typeof code !== 'string' || code.length > 500) {
+      throw new Error('Invalid code parameter');
+    }
+    
+    if (!state || typeof state !== 'string' || state.length > 500) {
+      throw new Error('Invalid state parameter');
+    }
+
     // Validate state
     const storedState = oauthStateStore.get(state);
     

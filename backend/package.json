@@ -9,6 +9,7 @@
     "test": "jest",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src/**/*.ts",
+    "typecheck": "tsc --noEmit",
     "db:setup": "prisma generate && prisma migrate dev",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "ts-node src/database/seeds/seed.ts"

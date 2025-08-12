@@ -56,7 +56,7 @@ echo ""
 echo "1. Health Check Tests"
 echo "---------------------"
 test_endpoint "Backend Health" "http://localhost:5001/health" "200"
-test_endpoint "Frontend Health" "http://localhost:3000" "200"
+test_endpoint "Frontend Static Files" "http://localhost:3000/static/js/bundle.js" "200"
 
 echo ""
 echo "2. Authentication Tests"
